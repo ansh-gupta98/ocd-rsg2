@@ -98,7 +98,7 @@ def _init_clients() -> None:
     if llm is not None and embeddings is not None:
         return
 
-    logger.info("📦 Initializing HuggingFace clients...")
+    logger.info("📦 Initializing HuggingFace Inference API clients...")
     start_time = time.time()
     
     hf_token = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")
@@ -108,7 +108,7 @@ def _init_clients() -> None:
             "Set HUGGINGFACEHUB_API_TOKEN or HF_TOKEN in your .env file or Railway environment."
         )
 
-    logger.info(f"  → Loading LLM: {HF_LLM_REPO_ID}")
+    logger.info(f"  → Connecting to LLM: {HF_LLM_REPO_ID}")
     endpoint = HuggingFaceEndpoint(
         repo_id=HF_LLM_REPO_ID,
         huggingfacehub_api_token=hf_token,
@@ -118,7 +118,7 @@ def _init_clients() -> None:
         do_sample=True,
     )
     llm = ChatHuggingFace(llm=endpoint)
-    logger.info("  ✓ LLM loaded")
+    logger.info("  ✓ LLM endpoint ready (API-based, no local download)")
 
     logger.info(f"  → Loading embeddings: {HF_EMBED_MODEL}")
     embeddings = HuggingFaceEmbeddings(
@@ -130,6 +130,8 @@ def _init_clients() -> None:
     
     elapsed = time.time() - start_time
     logger.info(f"✅ HuggingFace clients ready in {elapsed:.2f}s")
+        encode_kwargs={"normalize_embeddings": True},
+    )
 
 
 # ── FAISS helpers ─────────────────────────────────────────────────────────────
@@ -180,7 +182,6 @@ def _load_documents_from_directory(knowledge_dir: Path) -> List[Document]:
 
 
 def _build_or_load_knowledge_faiss(knowledge_dir: Path, vector_dir: Path, emb) -> FAISS:
-    logger.info(f"📚 Loading knowledge base from: {knowledge_dir}")
     raw_docs = _load_documents_from_directory(knowledge_dir)
     if not raw_docs:
         raise ValueError(
@@ -188,10 +189,8 @@ def _build_or_load_knowledge_faiss(knowledge_dir: Path, vector_dir: Path, emb) -
             "Add .txt, .md, or .pdf files (e.g. ocd_documentation/)."
         )
 
-    logger.info(f"  → Loaded {len(raw_docs)} raw documents")
     splitter   = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=120)
     split_docs = splitter.split_documents(raw_docs)
-    logger.info(f"  → Split into {len(split_docs)} chunks")
 
     rebuild    = os.getenv("OCD_REBUILD_VECTOR", "").lower() in ("1", "true", "yes")
     meta_path  = vector_dir / "rag_meta.json"
@@ -203,17 +202,13 @@ def _build_or_load_knowledge_faiss(knowledge_dir: Path, vector_dir: Path, emb) -
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             if meta.get("embedding_fingerprint") == emb_fp and meta.get("sources_fingerprint") == src_fp:
-                logger.info(f"  ✓ Using cached FAISS index from: {vector_dir}")
                 return FAISS.load_local(str(vector_dir), emb, allow_dangerous_deserialization=True)
         except (OSError, json.JSONDecodeError, ValueError):
-            logger.warning("  ⚠ Could not load cached FAISS index, rebuilding...")
+            pass
 
-    logger.info(f"  → Building FAISS index from {len(split_docs)} chunks...")
     vector_dir.mkdir(parents=True, exist_ok=True)
     db = FAISS.from_documents(split_docs, emb)
     db.save_local(str(vector_dir))
-    logger.info(f"  ✓ FAISS index saved to: {vector_dir}")
-    
     meta_path.write_text(
         json.dumps({
             "embedding_fingerprint": emb_fp,
@@ -223,7 +218,6 @@ def _build_or_load_knowledge_faiss(knowledge_dir: Path, vector_dir: Path, emb) -
         }, indent=2),
         encoding="utf-8",
     )
-    logger.info(f"✅ Knowledge base ready ({len(split_docs)} chunks)")
     return db
 
 
