@@ -1,0 +1,46 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.Python
+build/
+dist/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vector store (will be rebuilt in container)
+ocd_documentation_vector/
+
+# Local development
+.env
+*.log
+.coverage
+htmlcov/
+
+# Railway
+railway.json
+
+# Docker
+Dockerfile
+.dockerignore
